@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de tareas</title>
+<meta name="description" content="Tablero simple para organizar tus tareas: pendiente, haciendo, hecho. Funciona sin internet y tus tareas quedan en tu equipo.">
+<meta name="theme-color" content="#3b82f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181d" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Tareas">
+<style>
+  :root{
+    color-scheme:light dark;
+    --bg:#f4f5f7; --card:#fff; --txt:#1f2328; --muted:#6b7280; --borde:#e2e5ea;
+    --pend:#f59e0b; --haciendo:#3b82f6; --hecho:#16a34a; --nose:#dc2626;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16181d; --card:#22252c; --txt:#e8eaed; --muted:#9aa0a6; --borde:#343842; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:Segoe UI,system-ui,sans-serif;font-size:15px}
+  header{padding:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  h1 .ver{font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--borde);border-radius:999px;padding:1px 7px;vertical-align:middle}
+  h1{font-size:20px;margin:0 12px 0 0}
+  #nueva{flex:1;min-width:220px;display:flex;gap:8px}
+  input[type=text]{flex:1;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--card);color:var(--txt);font-size:15px}
+  button{cursor:pointer;border:1px solid var(--borde);background:var(--card);color:var(--txt);border-radius:8px;padding:9px 14px;font-size:14px}
+  button.prim{background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:600}
+  .herr{display:flex;gap:8px;flex-wrap:wrap}
+  #tablero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0 16px 24px}
+  @media (max-width:900px){#tablero{grid-template-columns:1fr 1fr}}
+  @media (max-width:560px){#tablero{grid-template-columns:1fr}}
+  .col{background:rgba(127,127,127,.08);border-radius:12px;padding:10px;min-height:200px;border-top:4px solid}
+  .col.drag{outline:2px dashed var(--muted)}
+  .col h2{font-size:15px;margin:4px 4px 10px;display:flex;justify-content:space-between}
+  .col h2 span{color:var(--muted);font-weight:400}
+  .tarea{background:var(--card);border:1px solid var(--borde);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab}
+  .tarea .t{white-space:pre-wrap;word-break:break-word}
+  .tarea .f{color:var(--muted);font-size:12px;margin-top:6px}
+  .tarea .acc{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+  .tarea .acc button{padding:4px 8px;font-size:12px}
+  .col[data-e=pend]{border-color:var(--pend)} .col[data-e=haciendo]{border-color:var(--haciendo)}
+  .col[data-e=hecho]{border-color:var(--hecho)} .col[data-e=nose]{border-color:var(--nose)}
+  .col[data-e=hecho] .t{text-decoration:line-through;color:var(--muted)}
+  #aviso{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(640px,calc(100% - 32px));background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.2);display:none;z-index:10}
+  #aviso .cambios{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+  #aviso .cambio{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 6px 6px 10px;border:1px solid var(--borde);border-radius:10px;background:var(--bg)}
+  #aviso .cambio s{color:var(--muted)}
+  #aviso .cambio.off{opacity:.8}
+  #aviso .cambio button{padding:4px 10px;font-size:13px;white-space:nowrap}
+  #aviso .pie{display:flex;gap:8px;justify-content:flex-end}
+  #aviso small{color:var(--muted)}
+  .tarea[data-et]{border-left:6px solid var(--et)}
+  .tarea[data-et=urgente]{--et:#dc2626;background:color-mix(in srgb,#dc2626 9%,var(--card))}
+  .tarea[data-et=importante]{--et:#f97316;background:color-mix(in srgb,#f97316 8%,var(--card))}
+  .tarea[data-et=pronto]{--et:#eab308}
+  .tarea[data-et=espera]{--et:#64748b}
+  .etq{display:inline-block;font-size:12px;font-weight:600;color:#fff;border-radius:999px;padding:2px 9px;margin-bottom:6px}
+  .menu-et{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+  .menu-et button{padding:4px 9px;font-size:12px;color:#fff;border:none;font-weight:600}
+  .menu-et button.quitar{color:var(--txt);border:1px solid var(--borde)}
+  #editor{border:none;border-radius:14px;padding:0;background:var(--card);color:var(--txt);width:min(760px,calc(100% - 32px));box-shadow:0 12px 40px rgba(0,0,0,.35)}
+  #editor::backdrop{background:rgba(0,0,0,.45)}
+  #editor form{display:flex;flex-direction:column;gap:12px;padding:18px}
+  #editor h3{margin:0;font-size:17px}
+  #editor textarea{width:100%;min-height:220px;resize:vertical;padding:14px;border:1px solid var(--borde);border-radius:10px;background:var(--bg);color:var(--txt);font:18px/1.6 Segoe UI,system-ui,sans-serif}
+  #editor textarea:focus{outline:2px solid #3b82f6;border-color:#3b82f6}
+  #editor .pie{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+  #editor .pie small{margin-right:auto;color:var(--muted)}
+  /* Notas de cada tarea */
+  .notas{margin-top:8px;padding:6px 8px;border-radius:8px;background:rgba(127,127,127,.09);font-size:13px}
+  .notas div{display:flex;gap:6px;align-items:flex-start;padding:2px 0}
+  .notas .nt{white-space:pre-wrap;word-break:break-word;flex:1}
+  .notas .ok .nt{text-decoration:line-through;color:var(--muted)}
+  .notas input{margin-top:3px;cursor:pointer}
+  .btn-notas.tiene{border-color:#8b5cf6;color:#8b5cf6;font-weight:600}
+  #dlgNotas{border:none;border-radius:14px;padding:0;background:var(--card);color:var(--txt);width:min(680px,calc(100% - 32px));box-shadow:0 12px 40px rgba(0,0,0,.35)}
+  #dlgNotas::backdrop{background:rgba(0,0,0,.45)}
+  #dlgNotas .cuerpo{padding:18px;display:flex;flex-direction:column;gap:12px}
+  #dlgNotas h3{margin:0;font-size:17px}
+  #dlgNotas .de{color:var(--muted);font-size:13px;white-space:pre-wrap}
+  #listaNotas{display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow:auto}
+  #listaNotas .vacio{color:var(--muted);font-size:14px}
+  .nota{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--borde);border-radius:10px;padding:8px 10px;background:var(--bg)}
+  .nota .nt{flex:1;white-space:pre-wrap;word-break:break-word}
+  .nota.ok .nt{text-decoration:line-through;color:var(--muted)}
+  .nota .tipo{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;color:#fff;white-space:nowrap}
+  .nota button{padding:2px 7px;font-size:12px}
+  .nota input{margin-top:4px;cursor:pointer;transform:scale(1.2)}
+  #nuevaNota{display:flex;flex-direction:column;gap:8px}
+  #nuevaNota textarea{width:100%;min-height:70px;resize:vertical;padding:10px;border:1px solid var(--borde);border-radius:10px;background:var(--bg);color:var(--txt);font:15px/1.5 Segoe UI,system-ui,sans-serif}
+  #nuevaNota .fila{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .tipos button.sel{outline:2px solid currentColor;font-weight:700}
+  .b-pend{color:var(--pend)} .b-haciendo{color:var(--haciendo)} .b-hecho{color:var(--hecho)} .b-nose{color:var(--nose)}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Control de tareas <small class="ver" title="Versión de la app">v1.1</small></h1>
+  <form id="nueva">
+    <input type="text" id="texto" placeholder="Escribe una tarea nueva y pulsa Enter…" autocomplete="off" spellcheck="true" lang="es">
+    <button class="prim">Agregar</button>
+  </form>
+  <div class="herr">
+    <input type="text" id="buscar" placeholder="Buscar…" style="max-width:160px">
+    <button id="exp" title="Guardar copia de seguridad">💾 Copia</button>
+    <button id="imp" title="Cargar copia de seguridad">📂 Cargar</button>
+    <input type="file" id="archivo" accept=".json" hidden>
+    <button id="instalar" class="prim" hidden title="Instalar como programa en este equipo">📲 Instalar</button>
+  </div>
+</header>
+<main id="tablero"></main>
+<div id="aviso"></div>
+<dialog id="editor">
+  <form method="dialog">
+    <h3>✏️ Editar tarea</h3>
+    <textarea id="editorTexto" spellcheck="true" lang="es"></textarea>
+    <div class="pie">
+      <small>Ctrl + Enter para guardar · Esc para cancelar</small>
+      <button value="cancelar" type="submit">Cancelar</button>
+      <button value="guardar" type="submit" class="prim">Guardar</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="dlgNotas">
+  <div class="cuerpo">
+    <h3>📝 Notas de la tarea</h3>
+    <div class="de" id="notasDe"></div>
+    <div id="listaNotas"></div>
+    <form id="nuevaNota">
+      <textarea id="notaTexto" placeholder="Escribe una nota… (Ctrl + Enter para agregarla)" spellcheck="true" lang="es"></textarea>
+      <div class="fila">
+        <span class="tipos" id="tiposNota"></span>
+        <button class="prim" style="margin-left:auto">Agregar nota</button>
+        <button type="button" id="cerrarNotas">Cerrar</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script>
+const ESTADOS = [
+  {id:'pend',     nombre:'⏳ Pendiente por hacer'},
+  {id:'haciendo', nombre:'🔧 Haciendo'},
+  {id:'hecho',    nombre:'✅ Hecho'},
+  {id:'nose',     nombre:'⛔ No se puede hacer'}
+];
+const CLAVE = 'control-tareas-v1';
+// Etiquetas de prioridad (para las tareas que no están hechas)
+const ETIQUETAS = [
+  {id:'urgente',    nombre:'🔥 Urgente',       color:'#dc2626'},
+  {id:'importante', nombre:'⚠️ Importante',    color:'#f97316'},
+  {id:'pronto',     nombre:'📌 Pronto',        color:'#ca8a04'},
+  {id:'espera',     nombre:'💤 Puede esperar', color:'#64748b'}
+];
+const ORDEN_ET = {urgente:0, importante:1, pronto:2, espera:4};
+// Tipos de nota (van aquí arriba porque sanear() los usa al cargar los datos)
+const TIPOS_NOTA = [
+  {id:'falta',    nombre:'☐ Me falta',     icono:'☐',  color:'#dc2626'},
+  {id:'recordar', nombre:'💡 Recordar',    icono:'💡', color:'#8b5cf6'},
+  {id:'info',     nombre:'ℹ️ Dato',        icono:'ℹ️', color:'#0ea5e9'}
+];
+let menuAbierto = null;
+let arrastrando = false;
+const INICIALES = [];
+
+// ---------- Datos ----------
+// Revisa una lista de tareas (lo guardado o una copia cargada) y arregla lo dañado sin perder lo bueno:
+// descarta lo que no es una tarea, pone números de id únicos y corrige estados, fechas y etiquetas inválidas.
+const fechaOk = s => typeof s==='string' && !isNaN(new Date(s).getTime());
+function idLibre(usados){ let id = Date.now(); while(usados.has(id)) id++; usados.add(id); return id; }
+function sanear(lista){
+  if(!Array.isArray(lista)) return null;
+  const est = new Set(ESTADOS.map(e=>e.id)), ets = new Set(ETIQUETAS.map(e=>e.id)), tps = new Set(TIPOS_NOTA.map(e=>e.id));
+  const usados = new Set(), hoy = new Date().toISOString(), out = [];
+  for(const x of lista){
+    if(!x || typeof x!=='object' || x.texto==null || !String(x.texto).trim()) continue;
+    const t = {...x, texto:String(x.texto)};
+    const id = Number(t.id);
+    if(Number.isFinite(id) && !usados.has(id)){ t.id = id; usados.add(id); } else t.id = idLibre(usados);
+    if(!est.has(t.estado)) t.estado = 'pend';
+    if(!fechaOk(t.fecha)) t.fecha = hoy;
+    for(const k of ['cambio','hechoEn']) if(k in t && !fechaOk(t[k])) delete t[k];
+    if('etiqueta' in t && !ets.has(t.etiqueta)) delete t.etiqueta;
+    if('notas' in t){
+      const nu = new Set();
+      t.notas = (Array.isArray(t.notas) ? t.notas : [])
+        .filter(n => n && typeof n==='object' && n.texto!=null && String(n.texto).trim())
+        .map(n => {
+          const m = {...n, texto:String(n.texto)}, nid = Number(m.id);
+          if(Number.isFinite(nid) && !nu.has(nid)){ m.id = nid; nu.add(nid); } else m.id = idLibre(nu);
+          if(!tps.has(m.tipo)) m.tipo = 'recordar';
+          if('hecho' in m) m.hecho = !!m.hecho;
+          return m;
+        });
+    }
+    out.push(t);
+  }
+  return out;
+}
+let avisoInicial = '';
+function cargar(){
+  let raw = null;
+  try{ raw = localStorage.getItem(CLAVE); }catch(e){}
+  if(raw!==null){
+    let d = null, n = 0;
+    try{ const p = JSON.parse(raw); n = Array.isArray(p) ? p.length : 0; d = sanear(p); }catch(e){}
+    if(d && d.length===n) return d;
+    // Venía algo dañado: antes de tocarlo se guarda una copia exacta en otra clave
+    try{ localStorage.setItem(CLAVE+'-copia-'+new Date().toISOString().slice(0,19), raw); }catch(e){}
+    avisoInicial = d
+      ? `⚠️ Se ignoraron ${n-d.length} tarea(s) dañada(s); quedó una copia interna de los datos originales.`
+      : '⚠️ Los datos guardados estaban dañados; quedó una copia interna y la lista empezó vacía.';
+    return d || [];
+  }
+  const hoy = new Date().toISOString();
+  return INICIALES.map((t,i)=>({id:Date.now()+i, texto:t, estado:'pend', fecha:hoy}));
+}
+// Lo que otra ventana de la app acaba de guardar (sin efectos secundarios)
+function leerGuardadas(){ try{ return sanear(JSON.parse(localStorage.getItem(CLAVE))); }catch(e){ return null; } }
+let tareas = cargar();
+function guardar(){ try{ localStorage.setItem(CLAVE, JSON.stringify(tareas)); }catch(e){ alert('No se pudo guardar'); } }
+const buscarTarea = id => tareas.find(x=>x.id===id);
+
+const fmt = iso => new Date(iso).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Para buscar sin importar tildes ni mayúsculas (telefono = Teléfono)
+const normal = s => String(s).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+
+function pintar(){
+  const filtro = normal(document.getElementById('buscar').value.trim());
+  const tab = document.getElementById('tablero');
+  tab.innerHTML = '';
+  for(const e of ESTADOS){
+    const lista = tareas.filter(t=>t.estado===e.id && (!filtro || normal(t.texto).includes(filtro)
+        || (t.notas||[]).some(n=>normal(n.texto).includes(filtro))));
+    // Urgentes arriba (en Hecho las etiquetas no se ven, así que ahí no se reordena)
+    if(e.id!=='hecho') lista.sort((a,b)=>(ORDEN_ET[a.etiqueta]??3)-(ORDEN_ET[b.etiqueta]??3));
+    const col = document.createElement('section');
+    col.className='col'; col.dataset.e=e.id;
+    col.innerHTML = `<h2>${e.nombre} <span>${lista.length}</span></h2>` +
+      (e.id==='hecho' ? `<div class="f" style="color:var(--muted);font-size:12px;margin:-4px 4px 8px">Se borran solas: <select id="plazo" title="Cuánto tiempo quedan las tareas terminadas antes de borrarse" style="font-size:12px;padding:1px 4px;border-radius:6px">${PLAZOS.map(([h,n])=>`<option value="${h}" ${h===plazoHoras()?'selected':''}>${n}</option>`).join('')}</select></div>` : '');
+    for(const t of lista){
+      const div = document.createElement('div');
+      div.className='tarea'; div.draggable=true; div.dataset.id=t.id;
+      const et = t.estado!=='hecho' && ETIQUETAS.find(x=>x.id===t.etiqueta);
+      if(et) div.dataset.et = et.id;
+      const etHtml = et ? `<span class="etq" style="background:${et.color}">${et.nombre}</span>` : '';
+      const menuHtml = (menuAbierto===t.id && t.estado!=='hecho')
+        ? `<div class="menu-et">${ETIQUETAS.map(x=>`<button data-et="${x.id}" style="background:${x.color}">${x.nombre}</button>`).join('')}<button data-et="" class="quitar">Sin etiqueta</button></div>` : '';
+      const btnEt = t.estado!=='hecho' ? '<button data-etiquetar title="Ponerle una etiqueta de color">🏷️</button>' : '';
+      const botones = ESTADOS.filter(x=>x.id!==t.estado)
+        .map(x=>`<button data-mover="${x.id}" class="b-${x.id}" title="Mover a ${x.nombre}">${x.nombre.split(' ')[0]} ${x.nombre.split(' ').slice(1).join(' ').replace('Pendiente por hacer','Pendiente').replace('No se puede hacer','No se puede')}</button>`).join('');
+      const notas = t.notas||[];
+      const faltan = notas.filter(n=>n.tipo==='falta' && !n.hecho).length;
+      const notasHtml = notas.length ? `<div class="notas">${notas.map(n=>{
+          const tp = TIPOS_NOTA.find(x=>x.id===n.tipo)||TIPOS_NOTA[1];
+          const marca = n.tipo==='falta'
+            ? `<input type="checkbox" data-nota-check="${n.id}" ${n.hecho?'checked':''} title="Marcar como resuelto">`
+            : `<span>${tp.icono}</span>`;
+          return `<div class="${n.hecho?'ok':''}">${marca}<span class="nt">${esc(n.texto)}</span></div>`;
+        }).join('')}</div>` : '';
+      const btnNotas = `<button data-notas class="btn-notas ${notas.length?'tiene':''}" title="Notas: cosas que faltan o que debo recordar">📝${notas.length?' '+notas.length:''}${faltan?' · falta '+faltan:''}</button>`;
+      div.innerHTML = `${etHtml}<div class="t">${esc(t.texto)}</div>${notasHtml}
+        <div class="f">Agregada: ${fmt(t.fecha)}${t.cambio?' · Último cambio: '+fmt(t.cambio):''}${t.estado==='hecho'?' · 🕒 '+restante(t):''}</div>
+        <div class="acc">${botones}${btnEt}${btnNotas}<button data-editar title="Editar">✏️</button><button data-borrar title="Borrar">🗑️</button></div>${menuHtml}`;
+      div.addEventListener('dragstart',ev=>{ arrastrando=true; ev.dataTransfer.setData('text/plain',t.id); });
+      div.addEventListener('dragend',()=>{ arrastrando=false; });
+      col.appendChild(div);
+    }
+    col.addEventListener('dragover',ev=>{ev.preventDefault();col.classList.add('drag')});
+    // Solo se quita el marco al salir de verdad de la columna (no al pasar por encima de una tarjeta)
+    col.addEventListener('dragleave',ev=>{ if(!col.contains(ev.relatedTarget)) col.classList.remove('drag'); });
+    col.addEventListener('drop',ev=>{ev.preventDefault();arrastrando=false;col.classList.remove('drag');mover(+ev.dataTransfer.getData('text/plain'),e.id)});
+    tab.appendChild(col);
+  }
+}
+function mover(id,estado){
+  const t = buscarTarea(id); if(!t||t.estado===estado) return;
+  t.estado=estado; t.cambio=new Date().toISOString();
+  if(estado==='hecho') t.hechoEn=t.cambio; else delete t.hechoEn;
+  guardar(); pintar();
+}
+// Soltar algo fuera de las columnas (por ejemplo un archivo) no debe sacar la ventana de la app
+document.addEventListener('dragover',ev=>{ ev.preventDefault(); if(!ev.target.closest?.('.col')) ev.dataTransfer.dropEffect='none'; });
+document.addEventListener('drop',ev=>{ ev.preventDefault(); arrastrando=false; });
+// Las tareas en "Hecho" se borran solas pasado el plazo que elija la persona (0 = nunca)
+const CLAVE_PLAZO = 'control-tareas-plazo-hecho';
+const PLAZOS = [[24,'a las 24 h'],[48,'a las 48 h'],[72,'a los 3 días'],[168,'a la semana'],[720,'al mes'],[0,'nunca']];
+function plazoHoras(){
+  try{ const v = +localStorage.getItem(CLAVE_PLAZO); if(PLAZOS.some(p=>p[0]===v) && localStorage.getItem(CLAVE_PLAZO)!==null) return v; }catch(e){}
+  return 48;
+}
+document.addEventListener('change',ev=>{
+  if(ev.target.id!=='plazo') return;
+  try{ localStorage.setItem(CLAVE_PLAZO, ev.target.value); }catch(e){}
+  limpiarHechas(); pintar();
+});
+function limpiarHechas(){
+  const h = plazoHoras(); if(!h) return;
+  const ahora = Date.now(), lim = h*3600000;
+  const antes = tareas.length;
+  tareas = tareas.filter(t => !(t.estado==='hecho' && ahora - new Date(t.hechoEn||t.cambio||t.fecha).getTime() >= lim));
+  if(tareas.length!==antes){ guardar(); pintar(); }
+}
+function restante(t){
+  const hp = plazoHoras(); if(!hp) return 'no se borra';
+  const ms = hp*3600000 - (Date.now() - new Date(t.hechoEn||t.cambio||t.fecha).getTime());
+  const h = Math.max(0, Math.ceil(ms/3600000));
+  if(h<=1) return 'se borra en menos de 1 hora';
+  if(h>48){ const d = Math.ceil(h/24); return 'se borra en '+d+' días'; }
+  return 'se borra en '+h+' h';
+}
+
+// ---------- Corrector de ortografía (LanguageTool, gratis) ----------
+const CLAVE_DIC = 'control-tareas-diccionario';
+const DIC_BASE = ['WhatsApp','YouTube','API'];
+function diccionario(){
+  try{ return new Set([...DIC_BASE, ...(JSON.parse(localStorage.getItem(CLAVE_DIC))||[])].map(p=>p.toLowerCase())); }
+  catch(e){ return new Set(DIC_BASE.map(p=>p.toLowerCase())); }
+}
+function agregarAlDiccionario(palabra){
+  try{ const l = JSON.parse(localStorage.getItem(CLAVE_DIC))||[]; if(!l.includes(palabra)){ l.push(palabra); localStorage.setItem(CLAVE_DIC, JSON.stringify(l)); } }catch(e){}
+}
+function quitarDelDiccionario(palabra){
+  try{ const l = JSON.parse(localStorage.getItem(CLAVE_DIC))||[]; localStorage.setItem(CLAVE_DIC, JSON.stringify(l.filter(p=>p!==palabra))); }catch(e){}
+}
+async function revisar(texto){
+  const r = await fetch('https://api.languagetool.org/v2/check',{
+    method:'POST', body:new URLSearchParams({text:texto, language:'es'}),
+    signal: AbortSignal.timeout(8000) // si el corrector no responde, no se queda esperando para siempre
+  });
+  if(!r.ok) throw new Error('corrector');
+  const d = await r.json(); const dic = diccionario();
+  return d.matches
+    .filter(m => m.replacements.length && m.rule.issueType!=='style')
+    .map(m => ({offset:m.offset, length:m.length, de:texto.substr(m.offset,m.length), a:m.replacements[0].value}))
+    .filter(c => !dic.has(c.de.toLowerCase()) && c.de!==c.a);
+}
+function aplicar(texto, cambios){
+  let s = texto;
+  for(const c of [...cambios].sort((x,y)=>y.offset-x.offset)) s = s.slice(0,c.offset)+c.a+s.slice(c.offset+c.length);
+  // Nombres propios siempre con su forma correcta (youtube → YouTube)
+  for(const p of DIC_BASE) s = s.replace(new RegExp('(?<!\\p{L})'+p+'(?!\\p{L})','giu'), p);
+  return s.charAt(0).toUpperCase()+s.slice(1);
+}
+// El texto ya quedó guardado; esto lo revisa en segundo plano y, si hace falta, lo corrige y avisa para poder deshacer.
+// leer() da el texto que hay ahora (por si se editó o se borró mientras se revisaba); escribir(v) guarda la corrección.
+async function corregir(texto, leer, escribir){
+  let cambios;
+  try{ cambios = await revisar(texto); }
+  catch(e){ cambios = []; mostrarAviso('⚠️ No se pudo revisar la ortografía (sin internet o el corrector no respondió). Quedó guardado tal como lo escribiste.'); }
+  if(leer()!==texto) return; // lo cambiaste o lo borraste mientras se revisaba: no se toca
+  let ultimo = aplicar(texto, cambios);
+  if(ultimo!==texto) escribir(ultimo);
+  if(!cambios.length) return;
+  const activos = cambios.map(()=>true);
+  // Omitir (valor=false) deja la palabra como la escribiste y la recuerda; Corregir (true) vuelve a aplicar la corrección
+  const cambiar = (indices, valor) => {
+    // Si el texto se editó o se borró después, tocar aquí pisaría lo nuevo
+    if(leer()!==ultimo){ mostrarAviso('Ese texto ya cambió o se borró; esta corrección ya no se puede deshacer desde aquí.'); return; }
+    for(const i of indices){ activos[i]=valor; if(valor) quitarDelDiccionario(cambios[i].de); else agregarAlDiccionario(cambios[i].de); }
+    ultimo = aplicar(texto, cambios.filter((_,k)=>activos[k]));
+    escribir(ultimo);
+    if(activos.some(Boolean)) pintarAviso();
+    else mostrarAviso('↩️ Listo: quedó como lo escribiste. No te lo volveré a corregir.', 3000); // no queda nada que mostrar: se va solo
+  };
+  const pintarAviso = () => {
+    const av = avisoEncima();
+    const quedan = activos.filter(Boolean).length;
+    av.innerHTML = `<b>✨ Corregí la ortografía</b><br><small>Si alguna estaba bien como la escribiste, toca <b>Omitir</b>. Este aviso se cierra solo.</small>
+      <div class="cambios">${cambios.map((c,i)=> activos[i]
+        ? `<div class="cambio"><span><s>${esc(c.de)}</s> → <b>${esc(c.a)}</b></span><button data-omitir="${i}" title="Dejarla como la escribí">✖ Omitir</button></div>`
+        : `<div class="cambio off"><span>Quedó <b>${esc(c.de)}</b> como lo escribiste</span><button data-aplicar="${i}" title="Sí corregirla">↩️ Corregir</button></div>`).join('')}</div>
+      <div class="pie">${quedan>1 ? '<button data-omitir-todas>Omitir todas</button>' : ''}<button data-cerrar class="prim">Listo</button></div>`;
+    av.style.display='block';
+    av.querySelectorAll('[data-omitir]').forEach(b=>b.onclick=()=>cambiar([+b.dataset.omitir], false));
+    av.querySelectorAll('[data-aplicar]').forEach(b=>b.onclick=()=>cambiar([+b.dataset.aplicar], true));
+    const todas = av.querySelector('[data-omitir-todas]'); if(todas) todas.onclick=()=>cambiar(cambios.map((_,i)=>i), false);
+    av.querySelector('[data-cerrar]').onclick=cerrarAviso;
+    programarCierre(15000); // si no tocas nada, se va solo y quedan las correcciones
+  };
+  pintarAviso();
+}
+let tAviso, msAviso = 5000;
+function cerrarAviso(){ clearTimeout(tAviso); document.getElementById('aviso').style.display='none'; }
+function programarCierre(ms){ msAviso = ms; clearTimeout(tAviso); tAviso = setTimeout(cerrarAviso, ms); }
+// Con el mouse encima, el aviso espera (para que alcances a leerlo); al salir vuelve a contar
+document.getElementById('aviso').addEventListener('mouseenter', ()=>clearTimeout(tAviso));
+document.getElementById('aviso').addEventListener('mouseleave', ev=>{ if(ev.currentTarget.style.display==='block') programarCierre(msAviso); });
+// Esc también lo cierra (si no hay una ventana abierta, que se cierra primero)
+document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && !document.querySelector('dialog[open]')) cerrarAviso(); });
+// Si hay una ventana abierta, el aviso va dentro de ella para que no quede tapado
+function avisoEncima(){
+  const av = document.getElementById('aviso');
+  const abierta = document.querySelector('dialog[open]');
+  (abierta || document.body).appendChild(av);
+  return av;
+}
+function mostrarAviso(msg, ms=5000){
+  const av = avisoEncima();
+  av.innerHTML = msg; av.style.display='block';
+  programarCierre(ms);
+}
+// Al cerrar una ventana, el aviso que estaba dentro sale de ella (si no, quedaba escondido y reaparecía después en otra tarea)
+document.querySelectorAll('dialog').forEach(d=>d.addEventListener('close',()=>{
+  const av = document.getElementById('aviso');
+  if(d.contains(av)) ([...document.querySelectorAll('dialog[open]')].find(x=>x!==d) || document.body).appendChild(av);
+}));
+
+// Ventana grande para editar tareas y notas (reemplaza la ventanita del navegador, que borraba los saltos de línea)
+function editarTexto(actual, titulo='✏️ Editar tarea'){
+  const dlg = document.getElementById('editor'), ta = document.getElementById('editorTexto');
+  dlg.querySelector('h3').textContent = titulo;
+  ta.value = actual; dlg.returnValue = '';
+  dlg.showModal();
+  ta.style.height = 'auto'; ta.style.height = Math.max(220, ta.scrollHeight + 4) + 'px';
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  return new Promise(res => dlg.addEventListener('close', () => res(dlg.returnValue==='guardar' ? ta.value : null), {once:true}));
+}
+document.getElementById('editorTexto').addEventListener('keydown', ev=>{
+  if(ev.key==='Enter' && ev.ctrlKey){ ev.preventDefault(); document.getElementById('editor').close('guardar'); }
+});
+
+// ---------- Notas por tarea ----------
+let notaTarea = null, tipoNota = 'falta';
+function pintarNotas(){
+  const t = buscarTarea(notaTarea); if(!t) return;
+  document.getElementById('notasDe').textContent = t.texto;
+  const notas = t.notas||[];
+  const lista = document.getElementById('listaNotas');
+  lista.innerHTML = notas.length ? notas.map(n=>{
+    const tp = TIPOS_NOTA.find(x=>x.id===n.tipo)||TIPOS_NOTA[1];
+    const check = n.tipo==='falta' ? `<input type="checkbox" data-check="${n.id}" ${n.hecho?'checked':''} title="Marcar como resuelto">` : '';
+    return `<div class="nota ${n.hecho?'ok':''}">${check}<span class="tipo" style="background:${tp.color}">${tp.nombre}</span>
+      <span class="nt">${esc(n.texto)}</span>
+      <button data-editar-nota="${n.id}" title="Editar nota">✏️</button><button data-borrar-nota="${n.id}" title="Borrar nota">🗑️</button></div>`;
+  }).join('') : '<div class="vacio">Esta tarea no tiene notas todavía. Escribe abajo lo que te falta o lo que debes recordar.</div>';
+  document.getElementById('tiposNota').innerHTML = TIPOS_NOTA.map(x=>
+    `<button type="button" data-tipo="${x.id}" class="${x.id===tipoNota?'sel':''}" style="color:${x.color}">${x.nombre}</button>`).join(' ');
+}
+function abrirNotas(id){
+  const ta = document.getElementById('notaTexto');
+  if(id!==notaTarea) ta.value = ''; // lo que quedó escrito para otra tarea no se pasa a esta
+  const dlg = document.getElementById('dlgNotas'), av = document.getElementById('aviso');
+  if(dlg.contains(av)) document.body.appendChild(av); // un aviso de la vez anterior no se mete en esta
+  notaTarea = id; pintarNotas();
+  dlg.showModal();
+  ta.focus();
+}
+// Busca una nota por ids (sirve aunque la lista se haya recargado desde otra ventana)
+const buscarNota = (tid, nid) => (buscarTarea(tid)?.notas||[]).find(x=>x.id===nid);
+function escritorNota(tid, nid){
+  return v => { const m = buscarNota(tid, nid); if(m){ m.texto = v; guardar(); pintarNotas(); pintar(); } };
+}
+document.getElementById('tiposNota').addEventListener('click',ev=>{
+  const b = ev.target.closest('[data-tipo]'); if(!b) return;
+  tipoNota = b.dataset.tipo; pintarNotas(); document.getElementById('notaTexto').focus();
+});
+document.getElementById('nuevaNota').addEventListener('submit',ev=>{
+  ev.preventDefault();
+  const ta = document.getElementById('notaTexto'); const v = ta.value.trim(); if(!v) return;
+  const t = buscarTarea(notaTarea); if(!t) return;
+  t.notas ||= [];
+  const n = {id:idLibre(new Set(t.notas.map(x=>x.id))), texto:aplicar(v,[]), tipo:tipoNota, fecha:new Date().toISOString()};
+  t.notas.push(n); ta.value=''; guardar(); pintarNotas(); pintar();
+  const tid = t.id;
+  corregir(n.texto, ()=>buscarNota(tid, n.id)?.texto, escritorNota(tid, n.id));
+});
+document.getElementById('notaTexto').addEventListener('keydown',ev=>{
+  if(ev.key==='Enter' && ev.ctrlKey){ ev.preventDefault(); document.getElementById('nuevaNota').requestSubmit(); }
+});
+document.getElementById('listaNotas').addEventListener('click',async ev=>{
+  const t = buscarTarea(notaTarea); if(!t || !t.notas) return;
+  const el = ev.target, tid = t.id;
+  if(el.dataset.check){
+    const n = buscarNota(tid, +el.dataset.check); if(n){ n.hecho = el.checked; guardar(); } pintarNotas(); pintar();
+  } else if(el.closest('[data-borrar-nota]')){
+    const nid = +el.closest('[data-borrar-nota]').dataset.borrarNota;
+    if(confirm('¿Borrar esta nota?')){ t.notas = t.notas.filter(x=>x.id!==nid); guardar(); pintarNotas(); pintar(); }
+  } else if(el.closest('[data-editar-nota]')){
+    const nid = +el.closest('[data-editar-nota]').dataset.editarNota;
+    const n = buscarNota(tid, nid); if(!n) return;
+    const nuevo = await editarTexto(n.texto, '✏️ Editar nota');
+    const actual = buscarNota(tid, nid), v = nuevo && nuevo.trim() && aplicar(nuevo.trim(), []);
+    if(v && actual && v!==actual.texto){
+      const escribir = escritorNota(tid, nid);
+      escribir(v); corregir(v, ()=>buscarNota(tid, nid)?.texto, escribir);
+    }
+  }
+});
+document.getElementById('cerrarNotas').onclick=()=>document.getElementById('dlgNotas').close();
+
+document.getElementById('tablero').addEventListener('change',ev=>{
+  const c = ev.target; if(!c.dataset.notaCheck) return;
+  const n = buscarNota(+c.closest('.tarea').dataset.id, +c.dataset.notaCheck);
+  if(n){ n.hecho = c.checked; guardar(); pintar(); }
+});
+
+document.getElementById('tablero').addEventListener('click',async ev=>{
+  const b = ev.target.closest('button'); if(!b) return;
+  const tarjeta = b.closest('.tarea'); if(!tarjeta) return;
+  const id = +tarjeta.dataset.id; const t = buscarTarea(id); if(!t) return;
+  if('notas' in b.dataset) abrirNotas(id);
+  else if(b.dataset.mover) mover(id,b.dataset.mover);
+  else if('etiquetar' in b.dataset){ menuAbierto = menuAbierto===id ? null : id; pintar(); }
+  else if('et' in b.dataset){
+    if(b.dataset.et) t.etiqueta=b.dataset.et; else delete t.etiqueta;
+    menuAbierto=null; guardar(); pintar();
+  }
+  else if('editar' in b.dataset){
+    const n = await editarTexto(t.texto);
+    const actual = buscarTarea(id), v = n && n.trim() && aplicar(n.trim(), []);
+    if(v && actual && v!==actual.texto){
+      // Se guarda enseguida; la ortografía se revisa después (si no hay internet, el cambio no se pierde)
+      const escribir = x => { const y = buscarTarea(id); if(y){ y.texto = x; guardar(); pintar(); } };
+      escribir(v); corregir(v, ()=>buscarTarea(id)?.texto, escribir);
+    }
+  } else if('borrar' in b.dataset){
+    if(confirm('¿Borrar esta tarea?\n\n'+t.texto)){ tareas=tareas.filter(x=>x.id!==id); guardar(); pintar(); }
+  }
+});
+document.getElementById('nueva').addEventListener('submit',ev=>{
+  ev.preventDefault();
+  const inp = document.getElementById('texto'); const v = inp.value.trim(); if(!v) return;
+  // La tarea se agrega enseguida; la ortografía se revisa después (si el corrector tarda o no hay internet, no se pierde)
+  const t = {id:idLibre(new Set(tareas.map(x=>x.id))), texto:aplicar(v,[]), estado:'pend', fecha:new Date().toISOString()};
+  tareas.unshift(t); inp.value=''; guardar(); pintar();
+  corregir(t.texto, ()=>buscarTarea(t.id)?.texto, x=>{ const y = buscarTarea(t.id); if(y){ y.texto = x; guardar(); pintar(); } });
+});
+document.getElementById('buscar').addEventListener('input',pintar);
+document.getElementById('exp').onclick=()=>{
+  const d = new Date(), dia = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; // fecha de aquí, no la de Londres
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(tareas,null,2)],{type:'application/json'}));
+  a.download='tareas-'+dia+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 10000);
+};
+document.getElementById('imp').onclick=()=>document.getElementById('archivo').click();
+document.getElementById('archivo').onchange=async ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  try{
+    const p = JSON.parse(await f.text()); const d = sanear(p);
+    if(!d || (p.length && !d.length)) throw 0;
+    const malas = p.length - d.length;
+    if(confirm(`La copia tiene ${d.length} tarea(s)${malas?` (se ignoran ${malas} dañada(s))`:''}.\nEsto reemplaza las ${tareas.length} tareas actuales. ¿Seguir?`)){
+      tareas=d; menuAbierto=null; guardar(); limpiarHechas(); pintar();
+    }
+  }catch(e){ alert('El archivo no es una copia válida'); }
+  finally{ ev.target.value=''; }
+};
+// Si la app está abierta en dos ventanas, cada una se entera de lo que guarda la otra (antes una borraba lo de la otra)
+window.addEventListener('storage',ev=>{
+  if(ev.key===CLAVE_PLAZO){ limpiarHechas(); pintar(); return; }
+  if(ev.key!==CLAVE) return;
+  const d = leerGuardadas(); if(!d) return;
+  tareas = d; pintar();
+  const dlg = document.getElementById('dlgNotas');
+  if(dlg.open){ if(buscarTarea(notaTarea)) pintarNotas(); else dlg.close(); }
+});
+guardar(); limpiarHechas(); pintar();
+if(avisoInicial) mostrarAviso(avisoInicial);
+setInterval(()=>{ limpiarHechas(); if(!arrastrando) pintar(); }, 60*1000);
+
+// ---------- App instalable (PWA) ----------
+// Funciona sin internet una vez abierta (sw.js) y se puede instalar con ícono propio, como un programa
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const btnInstalar = document.getElementById('instalar');
+let pedidoInstalar = null;
+// Pide al navegador que no borre las tareas cuando le falte espacio
+function pedirGuardadoFijo(){ try{ navigator.storage?.persist?.().catch(()=>{}); }catch(e){} }
+if(instalada) pedirGuardadoFijo();
+else if(esIOS) btnInstalar.hidden = false; // en iPhone no hay botón del sistema: se muestran los pasos
+window.addEventListener('beforeinstallprompt', ev=>{ ev.preventDefault(); pedidoInstalar = ev; btnInstalar.hidden = false; });
+btnInstalar.onclick = async ()=>{
+  if(pedidoInstalar){
+    const p = pedidoInstalar; pedidoInstalar = null; btnInstalar.hidden = true;
+    p.prompt(); await p.userChoice.catch(()=>{});
+  } else if(esIOS){
+    mostrarAviso('📲 <b>Para instalarla en iPhone / iPad:</b> toca el botón <b>Compartir</b> (el cuadro con la flecha ⬆️) y luego <b>"Agregar a inicio"</b>. Así queda con su ícono y tus tareas no se borran.', 15000);
+  } else {
+    mostrarAviso('Usa el ícono de instalar que aparece en la barra de direcciones del navegador.');
+  }
+};
+window.addEventListener('appinstalled', ()=>{ btnInstalar.hidden = true; pedidoInstalar = null; pedirGuardadoFijo(); });
+</script>
+</body>
+</html>
